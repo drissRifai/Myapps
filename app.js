@@ -60,9 +60,20 @@ function dueText(key) {
   const delta = daysBetween(key, today());
   return delta < 0 ? `En retard de ${-delta} j` : delta === 0 ? "Aujourd’hui" : delta === 1 ? 'Demain' : `Dans ${delta} j`;
 }
-function taskMarkup(task) {
+function googleCalendarUrl(task) {
+  const [year, month, day] = task.due.split('-').map(Number);
+  const end = dateKey(new Date(year, month - 1, day + 1)).replaceAll('-', '');
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: `${task.label} ${task.plant.name}`,
+    dates: `${task.due.replaceAll('-', '')}/${end}`,
+    details: task.kind === 'water' ? 'Rappel Mon Jardin : vérifie le terreau avant d’arroser.' : 'Rappel Mon Jardin : nettoyer les feuilles.',
+  });
+  return `https://calendar.google.com/calendar/render?${params}`;
+}
+function taskMarkup(task, calendarLink = false) {
   const late = task.due <= today();
-  return `<div class="task-row"><span class="task-icon ${task.kind}">${task.icon}</span><div class="task-copy"><strong>${escapeHtml(task.plant.name)}</strong><span>${task.label} · ${formatDate(task.due)}</span></div><span class="due ${late ? 'urgent' : ''}">${dueText(task.due)}</span><button type="button" class="check-button" data-done="${task.plant.id}:${task.kind}" aria-label="Marquer ${task.label.toLowerCase()} pour ${escapeHtml(task.plant.name)} comme fait">✓</button></div>`;
+  return `<div class="task-row"><span class="task-icon ${task.kind}">${task.icon}</span><div class="task-copy"><strong>${escapeHtml(task.plant.name)}</strong><span>${task.label} · ${formatDate(task.due)}</span></div><span class="due ${late ? 'urgent' : ''}">${dueText(task.due)}</span>${calendarLink ? `<a class="calendar-link" href="${googleCalendarUrl(task)}" target="_blank" rel="noopener noreferrer" aria-label="Ajouter ${task.label.toLowerCase()} pour ${escapeHtml(task.plant.name)} à Google Calendar">Google Calendar ↗</a>` : ''}<button type="button" class="check-button" data-done="${task.plant.id}:${task.kind}" aria-label="Marquer ${task.label.toLowerCase()} pour ${escapeHtml(task.plant.name)} comme fait">✓</button></div>`;
 }
 function plantMarkup(plant) {
   const next = wateringDue(plant);
@@ -95,13 +106,13 @@ function calendarMarkup() {
   for (let day = 1; day <= count; day++) {
     const key = dateKey(new Date(year, index, day));
     const dayTasks = tasks.filter((task) => task.due === key);
-    cells.push(`<div class="calendar-cell ${key === today() ? 'current' : ''}"><span class="day-number">${day}</span>${dayTasks.map((task) => `<span class="calendar-event ${task.kind}" title="${escapeHtml(task.plant.name)} — ${task.label}">${task.icon} ${escapeHtml(task.plant.name)}</span>`).join('')}</div>`);
+    cells.push(`<div class="calendar-cell ${key === today() ? 'current' : ''}"><span class="day-number">${day}</span>${dayTasks.map((task) => `<a class="calendar-event ${task.kind}" href="${googleCalendarUrl(task)}" target="_blank" rel="noopener noreferrer" title="Ajouter ${task.label.toLowerCase()} pour ${escapeHtml(task.plant.name)} à Google Calendar" aria-label="Ajouter ${task.label.toLowerCase()} pour ${escapeHtml(task.plant.name)} à Google Calendar">${task.icon} ${escapeHtml(task.plant.name)}</a>`).join('')}</div>`);
   }
   const overdue = tasks.filter((task) => task.due < today());
   return `${header('AU FIL DES JOURS', 'Le calendrier <em>✳</em>', 'Retrouve les prochains soins de tes plantes.')}
     ${overdue.length ? `<div class="overdue-note">${overdue.length} soin${overdue.length > 1 ? 's' : ''} en retard : retrouve-les ci-dessous et coche-les une fois faits.</div>` : ''}
     <div class="calendar-panel"><div class="calendar-head"><h2>${new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(month)}</h2><div><button data-month="-1" aria-label="Mois précédent">←</button><button data-month="0">Aujourd’hui</button><button data-month="1" aria-label="Mois suivant">→</button></div></div><div class="calendar-grid days">${['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map((day) => `<span>${day}</span>`).join('')}</div><div class="calendar-grid cells">${cells.join('')}</div></div>
-    <div class="section-title second"><div><span class="eyebrow">TOUS LES SOINS</span><h2>À venir</h2></div></div><div class="task-list">${tasks.length ? tasks.map(taskMarkup).join('') : emptyMarkup('Ajoute une plante pour créer ton calendrier.')}</div>`;
+    <div class="section-title second"><div><span class="eyebrow">TOUS LES SOINS</span><h2>À venir</h2></div></div><p class="calendar-help">Clique sur un soin pour préparer un événement dans Google Calendar, puis confirme son ajout là-bas. Les rappels ajoutés ne se mettent pas à jour automatiquement.</p><div class="task-list">${tasks.length ? tasks.map((task) => taskMarkup(task, true)).join('') : emptyMarkup('Ajoute une plante pour créer ton calendrier.')}</div>`;
 }
 
 function render() {
