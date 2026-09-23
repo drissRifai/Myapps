@@ -1,4 +1,5 @@
 import { initSync, syncOnChange } from './sync-v2.js';
+import { PLANT_CATALOG, CARE_TIPS } from './plant-catalog.js';
 
 const STORAGE_KEY = 'mon-jardin-plants-v1';
 const GARDEN_KEY = 'mon-jardin-garden-v2';
@@ -14,16 +15,8 @@ const formatDate = (key, options = { day: 'numeric', month: 'long' }) => new Int
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 const uid = () => crypto.randomUUID();
 // Intervalles de vérification indicatifs pour plantes d'intérieur, pas des consignes d'arrosage automatique.
-const PLANT_PRESETS = {
-  monstera: { species: 'Monstera deliciosa', summer: 7, winter: 14 },
-  pothos: { species: 'Pothos', summer: 7, winter: 14 },
-  spathiphyllum: { species: 'Spathiphyllum', summer: 5, winter: 10 },
-  ficus: { species: 'Ficus elastica', summer: 7, winter: 14 },
-  sansevieria: { species: 'Sansevieria', summer: 14, winter: 30 },
-  aloe: { species: 'Aloe vera', summer: 14, winter: 30 },
-  succulente: { species: 'Succulente', summer: 14, winter: 30 },
-  cactus: { species: 'Cactus', summer: 21, winter: 45 },
-};
+const PLANT_PRESETS = Object.fromEntries(PLANT_CATALOG.map((entry) => [entry.id, entry]));
+const CATALOG_GROUPS = ['Tropicales', 'Résistantes', 'Succulentes', 'Fleuries', 'Aromatiques'];
 
 function normalizeGarden(data) {
   if (Array.isArray(data)) return { version: 2, profiles: [{ id: 'principal', name: 'Principal', plants: data.filter((item) => item && item.id && item.name) }] };
@@ -45,9 +38,11 @@ let garden = loadGarden();
 let activeProfileId = localStorage.getItem(ACTIVE_PROFILE_KEY);
 if (!garden.profiles.some((profile) => profile.id === activeProfileId)) activeProfileId = garden.profiles[0].id;
 let plants = garden.profiles.find((profile) => profile.id === activeProfileId).plants;
-let view = ['accueil', 'plantes', 'calendrier'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'accueil';
+let view = ['accueil', 'plantes', 'calendrier', 'catalogue'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'accueil';
 let calendarOffset = 0;
 let editingId = null;
+let catalogQuery = '';
+let catalogGroup = 'Toutes';
 
 function saveGarden(next, selectedId = activeProfileId, changes = {}) {
   try {
@@ -127,8 +122,13 @@ function header(eyebrow, title, description, button = true) { return `<div class
 function homeMarkup() {
   const tasks = allTasks();
   const due = tasks.filter((task) => task.due <= today());
+  const day = Math.floor(new Date(`${today()}T12:00:00`).getTime() / DAY);
+  const featured = plants.length ? plants[day % plants.length] : null;
+  const guide = featured && PLANT_CATALOG.find((entry) => entry.species === featured.species);
+  const dailyTip = guide ? `${featured.name} : ${guide.tip}` : CARE_TIPS[day % CARE_TIPS.length];
   return `${header('TON JARDIN PERSONNEL', 'Bonjour, jardinier <em>✳</em>', 'Un petit coup d’œil à tes plantes et aux soins du moment.')}
     <div class="stats"><div class="stat"><span>MES PLANTES</span><strong>${plants.length.toString().padStart(2, '0')}</strong><small>petites vies à chouchouter</small></div><div class="stat highlight"><span>À FAIRE AUJOURD’HUI</span><strong>${due.length.toString().padStart(2, '0')}</strong><small>${due.length ? 'soins qui t’attendent' : 'tout est à jour, bravo !'}</small></div><div class="stat"><span>PROCHAIN SOIN</span><strong class="stat-date">${tasks.length ? formatDate(tasks[0].due, { day: 'numeric', month: 'short' }) : '—'}</strong><small>${tasks.length ? escapeHtml(tasks[0].plant.name) : 'ajoute une plante'}</small></div></div>
+    <aside class="daily-tip"><span>✳ LE CONSEIL DU JOUR</span><p>${escapeHtml(dailyTip)}</p><a href="#catalogue">Explorer le catalogue ↗</a></aside>
     <div class="section-title"><div><span class="eyebrow">À NE PAS OUBLIER</span><h2>Les soins à venir</h2></div><a href="#calendrier">Voir le calendrier ↗</a></div>
     <div class="task-list">${tasks.length ? tasks.slice(0, 6).map(taskMarkup).join('') : emptyMarkup('Ajoute ta première plante pour voir ses soins apparaître.')}</div>
     <div class="section-title second"><div><span class="eyebrow">LA PETITE JUNGLE</span><h2>Tes plantes</h2></div><a href="#plantes">Voir toutes les plantes ↗</a></div>
@@ -136,6 +136,21 @@ function homeMarkup() {
 }
 
 function plantsMarkup() { return `${header('LA PETITE JUNGLE', 'Mes plantes <em>✳</em>', 'Chaque plante a son histoire et son propre rythme.')}${plants.length ? `<div class="plant-grid">${plants.map(plantMarkup).join('')}</div>` : emptyMarkup('Le début d’une jolie collection, plante par plante.')}`; }
+
+function catalogResultsMarkup() {
+  const query = catalogQuery.trim().toLocaleLowerCase('fr');
+  const matches = PLANT_CATALOG.filter((entry) => (catalogGroup === 'Toutes' || entry.group === catalogGroup) &&
+    `${entry.name} ${entry.species}`.toLocaleLowerCase('fr').includes(query));
+  if (!matches.length) return '<p class="catalog-empty">Aucune plante trouvée. Essaie un autre nom ou une autre catégorie.</p>';
+  return matches.map((entry) => `<article class="catalog-card"><span class="catalog-category">${escapeHtml(entry.group)}</span><h2>${escapeHtml(entry.name)}</h2><small>${escapeHtml(entry.species)}</small><div class="catalog-facts"><span>☀ ${entry.light === 'directe' ? 'Soleil direct' : entry.light === 'faible' ? 'Lumière douce' : 'Lumière indirecte'}</span><span>💧 Vérifier : ${entry.summer} j été · ${entry.winter} j hiver</span></div><p>${escapeHtml(entry.tip)}</p><button type="button" class="button ghost" data-catalog-add="${entry.id}">+ Ajouter à mes plantes</button></article>`).join('');
+}
+function catalogueMarkup() {
+  return `${header('APPRENDRE À LES CONNAÎTRE', 'Le catalogue <em>✳</em>', 'Des pistes pour prendre soin de tes plantes. Ajuste toujours selon la lumière, la saison et ton pot.', false)}
+    <div class="catalog-tools"><label for="catalog-search">Rechercher une plante</label><input id="catalog-search" type="search" placeholder="Ex. : monstera, orchidée, basilic…" value="${escapeHtml(catalogQuery)}" autocomplete="off" /><label for="catalog-group">Catégorie</label><select id="catalog-group">${['Toutes', ...CATALOG_GROUPS].map((group) => `<option value="${group}" ${group === catalogGroup ? 'selected' : ''}>${group}</option>`).join('')}</select></div>
+    <p class="catalog-note">Les jours proposés sont des rappels pour <strong>vérifier le terreau</strong>, jamais un ordre d’arroser. Chaque plante et chaque logement ont leur rythme.</p>
+    <div id="catalog-results" class="catalog-grid">${catalogResultsMarkup()}</div>
+    <p class="catalog-sources">Pour aller plus loin : <a href="https://www.rhs.org.uk/plants/types/houseplants/growing-guide" target="_blank" rel="noopener noreferrer">guide RHS des plantes d’intérieur ↗</a></p>`;
+}
 
 function calendarMarkup() {
   const month = new Date(new Date().getFullYear(), new Date().getMonth() + calendarOffset, 1);
@@ -159,9 +174,9 @@ function render() {
   $('#profile-select').innerHTML = garden.profiles.map((profile) => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)}</option>`).join('');
   $('#profile-select').value = activeProfileId;
   $('#today-label').textContent = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
-  $('#breadcrumb').textContent = `MON ESPACE / ${{ accueil: 'VUE D’ENSEMBLE', plantes: 'MES PLANTES', calendrier: 'CALENDRIER' }[view]}`;
+  $('#breadcrumb').textContent = `MON ESPACE / ${{ accueil: 'VUE D’ENSEMBLE', plantes: 'MES PLANTES', calendrier: 'CALENDRIER', catalogue: 'CATALOGUE' }[view]}`;
   document.querySelectorAll('.nav-link').forEach((link) => { link.classList.toggle('active', link.dataset.view === view); link.setAttribute('aria-current', link.dataset.view === view ? 'page' : 'false'); });
-  $('#app').innerHTML = ({ accueil: homeMarkup, plantes: plantsMarkup, calendrier: calendarMarkup })[view]();
+  $('#app').innerHTML = ({ accueil: homeMarkup, plantes: plantsMarkup, calendrier: calendarMarkup, catalogue: catalogueMarkup })[view]();
 }
 
 let profileDialogMode = 'add';
@@ -200,7 +215,14 @@ $('#profile-form').addEventListener('submit', (event) => {
   else $('#profile-error').textContent = 'Impossible d’enregistrer ce profil sur cet appareil.';
 });
 
-function openDialog(plant = null) {
+function applyPreset(preset) {
+  const form = $('#plant-form');
+  form.elements.species.value = preset.species;
+  form.elements.summer.value = preset.summer;
+  form.elements.winter.value = preset.winter;
+  form.elements.light.value = preset.light;
+}
+function openDialog(plant = null, presetId = '') {
   editingId = plant?.id || null;
   const form = $('#plant-form'); form.reset();
   $('#form-error').textContent = '';
@@ -209,16 +231,31 @@ function openDialog(plant = null) {
   form.elements.lastWatered.value = plant?.lastWatered || today();
   for (const field of ['name', 'species', 'location', 'light', 'summer', 'winter', 'clean']) if (plant?.[field] !== undefined) form.elements[field].value = plant[field];
   $('#plant-preset').value = Object.keys(PLANT_PRESETS).find((key) => PLANT_PRESETS[key].species === plant?.species) || '';
+  if (!plant && PLANT_PRESETS[presetId]) {
+    $('#plant-preset').value = presetId;
+    form.elements.name.value = PLANT_PRESETS[presetId].name;
+    applyPreset(PLANT_PRESETS[presetId]);
+  }
   $('#plant-dialog').showModal();
 }
 
 $('#plant-preset').addEventListener('change', (event) => {
   const preset = PLANT_PRESETS[event.target.value];
   if (!preset) return;
-  const form = $('#plant-form');
-  form.elements.species.value = preset.species;
-  form.elements.summer.value = preset.summer;
-  form.elements.winter.value = preset.winter;
+  applyPreset(preset);
+});
+$('#plant-preset').innerHTML = '<option value="">Choisir une plante (facultatif)</option>' +
+  CATALOG_GROUPS.map((group) => `<optgroup label="${group}">${PLANT_CATALOG.filter((entry) => entry.group === group).map((entry) => `<option value="${entry.id}">${escapeHtml(entry.name)}</option>`).join('')}</optgroup>`).join('');
+
+document.addEventListener('input', (event) => {
+  if (event.target.id !== 'catalog-search') return;
+  catalogQuery = event.target.value;
+  $('#catalog-results').innerHTML = catalogResultsMarkup();
+});
+document.addEventListener('change', (event) => {
+  if (event.target.id !== 'catalog-group') return;
+  catalogGroup = event.target.value;
+  $('#catalog-results').innerHTML = catalogResultsMarkup();
 });
 
 async function shrinkPhoto(file) {
@@ -249,6 +286,7 @@ $('#plant-form').addEventListener('submit', async (event) => {
 document.addEventListener('click', (event) => {
   const target = event.target.closest('button'); if (!target) return;
   if (target.matches('[data-add]')) openDialog();
+  if (target.dataset.catalogAdd && PLANT_PRESETS[target.dataset.catalogAdd]) openDialog(null, target.dataset.catalogAdd);
   if (target.dataset.info) {
     const card = target.closest('.plant-card');
     const open = card.classList.toggle('info-open');
@@ -269,7 +307,7 @@ document.addEventListener('click', (event) => {
 $('#close-dialog').addEventListener('click', () => $('#plant-dialog').close());
 $('#cancel-dialog').addEventListener('click', () => $('#plant-dialog').close());
 $('#plant-dialog').addEventListener('click', (event) => { if (event.target === $('#plant-dialog')) $('#plant-dialog').close(); });
-window.addEventListener('hashchange', () => { view = ['accueil', 'plantes', 'calendrier'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'accueil'; render(); });
+window.addEventListener('hashchange', () => { view = ['accueil', 'plantes', 'calendrier', 'catalogue'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'accueil'; render(); });
 render();
 initSync({
   getPlants: () => garden,
