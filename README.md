@@ -10,12 +10,12 @@ Depuis le dossier du projet, lancer `python3 -m http.server 8000`, puis ouvrir `
 
 Le déploiement existant est un **Worker avec Static Assets**. Le dossier `functions/` seul n'y crée pas de route API : `worker.js` importe la fonction de synchronisation et sert les autres requêtes depuis le binding `ASSETS`.
 
-Le fichier Wrangler de déploiement doit porter le **nom exact du Worker existant** et le **nom exact du bucket R2**. Sa configuration inclut `main: "./worker.js"`, `assets.directory: "."`, `assets.binding: "ASSETS"`, `assets.run_worker_first: ["/api/*"]` et un `r2_buckets` dont `binding` vaut `GARDEN_BUCKET`. Le dossier `.assetsignore` exclut le code serveur des fichiers publics. La commande de déploiement Git doit lancer `npx wrangler deploy`.
+Le fichier `wrangler.jsonc` porte le nom du Worker existant (`monjardin`) et du bucket R2 (`gardeb-bucket`). Sa configuration inclut `main: "./worker.js"`, `assets.directory: "."`, `assets.binding: "ASSETS"`, `assets.run_worker_first: ["/api/*"]` et un binding R2 nommé `GARDEN_BUCKET`. Le dossier `.assetsignore` exclut le code serveur des fichiers publics. La commande de déploiement Git doit lancer `npx wrangler deploy`.
 
 ## Activer la synchronisation R2
 
 1. Créer un bucket R2 privé dans le même compte Cloudflare que le Worker. Ne pas activer d'accès public au bucket et ne pas créer de clé API R2 pour le navigateur.
-2. Renseigner le nom réel du bucket dans `wrangler.jsonc` sous `r2_buckets`, avec le binding **`GARDEN_BUCKET`**, puis déployer le Worker complet. Un projet qui ne déploie que des assets statiques n'exécute pas l'API `/api/sync`.
+2. Le bucket **`gardeb-bucket`** est déjà déclaré dans `wrangler.jsonc` avec le binding **`GARDEN_BUCKET`**. Déployer le Worker complet avec `npx wrangler deploy`. Un projet qui ne déploie que des assets statiques n'exécute pas l'API `/api/sync`.
 3. Vérifier que `/api/sync` répond 401 sans clé, plutôt que de renvoyer la page HTML du site ; l'API est alors active.
 4. Dans l'application, ouvrir **☁ Synchronisation**, cliquer sur **Créer / connecter** puis **Copier la clé**. Coller cette clé sur le deuxième appareil et cliquer sur **Créer / connecter**. Conserver la clé dans un endroit sûr : elle sert à accéder aux données et ne peut pas être retrouvée depuis le serveur.
 
