@@ -23,7 +23,7 @@
       </aside>
 
       <main id="main">
-        <header class="topbar"><span id="breadcrumb">MON ESPACE / VUE D’ENSEMBLE</span><span id="today-label"></span></header>
+        <header class="topbar"><span id="breadcrumb">MON ESPACE / VUE D’ENSEMBLE</span><div class="topbar-actions"><span id="today-label"></span><button type="button" id="sync-open" class="sync-trigger">☁ Synchronisation</button></div></header>
         <section id="app" aria-live="polite"></section>
       </main>
     </div>
@@ -47,6 +47,16 @@
         <div id="form-error" class="form-error" role="alert"></div>
         <div class="dialog-actions"><button type="button" class="button ghost" id="cancel-dialog">Annuler</button><button class="button primary" type="submit">Enregistrer la plante <span>↗</span></button></div>
       </form>
+    </dialog>
+    <dialog id="sync-dialog" aria-labelledby="sync-title">
+      <div class="sync-panel">
+        <div class="dialog-head"><div><span class="eyebrow">MES PLANTES PARTOUT</span><h2 id="sync-title">Synchronisation</h2></div><button type="button" class="icon-button" id="sync-close" aria-label="Fermer">×</button></div>
+        <p>Crée une clé sur cet appareil, puis colle-la sur l’autre appareil pour retrouver tes plantes et leurs photos.</p>
+        <label class="field">Clé de synchronisation <input id="sync-key" type="text" autocomplete="off" spellcheck="false" placeholder="Colle ici ta clé, ou crée-en une" /></label>
+        <p class="sync-note">Garde cette clé privée et en lieu sûr : elle donne accès à tes données. Sans elle, les données stockées dans R2 ne pourront pas être récupérées.</p>
+        <div class="sync-actions"><button type="button" class="button primary" id="sync-connect">Créer / connecter</button><button type="button" class="button ghost" id="sync-copy">Copier la clé</button><button type="button" class="button ghost" id="sync-now">Synchroniser</button><button type="button" class="button ghost" id="sync-disconnect">Déconnecter cet appareil</button></div>
+        <p id="sync-status" class="sync-status" role="status" aria-live="polite"></p>
+      </div>
     </dialog>
     <script type="module" src="app.js"></script>
   </body>
