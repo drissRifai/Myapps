@@ -3,3 +3,5 @@
 
 .calendar-link{font-size:11px;font-weight:700;color:#517852;white-space:nowrap}.calendar-link:hover,.calendar-event:hover{text-decoration:underline}.calendar-help{font-size:11px;color:#879484;margin:-8px 0 16px}
 @media(max-width:700px){.task-row:has(.calendar-link){flex-wrap:wrap}.task-row .calendar-link{margin-left:auto;font-size:10px}.task-row:has(.calendar-link) .due{margin-left:auto}}
+
+.preset-help{font-size:11px;line-height:1.5;color:#778a75;margin:14px 0 2px}
