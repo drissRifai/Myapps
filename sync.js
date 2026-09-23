@@ -1,17 +1,27 @@
 const KEY_STORAGE = 'mon-jardin-sync-key-v1';
 const ETAG_STORAGE = 'mon-jardin-sync-etag-v1';
 const DIRTY_STORAGE = 'mon-jardin-sync-dirty-v1';
+const PENDING_STORAGE = 'mon-jardin-sync-pending-v1';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const $ = (selector) => document.querySelector(selector);
 let secret = localStorage.getItem(KEY_STORAGE) || '';
 let etag = localStorage.getItem(ETAG_STORAGE) || '';
 let dirty = localStorage.getItem(DIRTY_STORAGE) === '1';
+let pending = (() => {
+  try {
+    const data = JSON.parse(localStorage.getItem(PENDING_STORAGE) || '{}');
+    return { profiles: Array.isArray(data.profiles) ? data.profiles : [], plants: Array.isArray(data.plants) ? data.plants : [] };
+  } catch { return { profiles: [], plants: [] }; }
+})();
+let editSerial = 0;
 let getPlants;
 let applyPlants;
 let hasData;
 let running = null;
 let timer;
+let needsRerun = false;
+let rerunDelay = 100;
 
 function status(message) { $('#sync-status').textContent = message; }
 function setDirty(value) {
@@ -23,6 +33,46 @@ function setEtag(value) {
   etag = value || '';
   if (etag) localStorage.setItem(ETAG_STORAGE, etag);
   else localStorage.removeItem(ETAG_STORAGE);
+}
+function setPending(next) {
+  pending = next;
+  if (next.profiles.length || next.plants.length) localStorage.setItem(PENDING_STORAGE, JSON.stringify(next));
+  else localStorage.removeItem(PENDING_STORAGE);
+}
+function gardenFrom(snapshot) {
+  if (Array.isArray(snapshot)) return { version: 2, profiles: [{ id: 'principal', name: 'Principal', plants: snapshot }] };
+  return snapshot;
+}
+function mergeGardens(remoteSnapshot, localSnapshot, changes) {
+  const remote = gardenFrom(remoteSnapshot);
+  const local = gardenFrom(localSnapshot);
+  const changedProfiles = new Set(changes.profiles);
+  const changedPlants = new Set(changes.plants);
+  // Une ancienne version déjà en attente ne conservait pas le détail des modifications.
+  const legacyPending = dirty && !changedProfiles.size && !changedPlants.size;
+  const profiles = new Map(remote.profiles.map((profile) => [profile.id, { ...profile, plants: [...profile.plants] }]));
+  for (const profile of local.profiles) {
+    const target = profiles.get(profile.id);
+    if (!target) { profiles.set(profile.id, profile); continue; }
+    if (changedProfiles.has(profile.id)) target.name = profile.name;
+    const plants = new Map(target.plants.map((plant) => [plant.id, plant]));
+    for (const plant of profile.plants) {
+      if (changedPlants.has(`${profile.id}:${plant.id}`)) plants.set(plant.id, plant);
+      else if (legacyPending && !plants.has(plant.id)) plants.set(plant.id, plant);
+      else if (legacyPending && JSON.stringify(plants.get(plant.id)) !== JSON.stringify(plant)) {
+        // Une ancienne version en attente n'identifiait pas la plante modifiée : conserver les deux variantes.
+        const copy = { ...plant, id: crypto.randomUUID(), name: `${plant.name} (copie locale)` };
+        plants.set(copy.id, copy);
+      }
+    }
+    for (const key of changedPlants) {
+      if (!key.startsWith(`${profile.id}:`)) continue;
+      const id = key.slice(profile.id.length + 1);
+      if (!profile.plants.some((plant) => plant.id === id)) plants.delete(id);
+    }
+    target.plants = [...plants.values()];
+  }
+  return { version: 2, profiles: [...profiles.values()] };
 }
 function base64url(bytes) {
   let binary = '';
@@ -66,49 +116,68 @@ async function request(method, token, body, version) {
   }
   return response;
 }
-async function upload() {
-  const snapshot = JSON.stringify(getPlants());
-  const response = await request('PUT', secret, await encrypt(JSON.parse(snapshot), secret), etag);
-  if (response.status === 409) {
-    status('Conflit : le cloud a changé sur un autre appareil. Tes modifications restent sur cet appareil. Déconnecte puis reconnecte la clé pour choisir la version à conserver.');
-    return;
-  }
-  setEtag(response.headers.get('ETag'));
-  if (JSON.stringify(getPlants()) === snapshot) { setDirty(false); status('Toutes tes plantes sont synchronisées.'); }
-  else { setDirty(true); schedule(); }
-}
 async function synchronize() {
   if (!secret) { status('Crée ou colle une clé pour activer la synchronisation.'); return; }
   if (running) return running;
   running = (async () => {
     status('Synchronisation en cours…');
     try {
-      const response = await request('GET', secret);
-      const remoteEtag = response.status === 404 ? '' : response.headers.get('ETag');
-      if (dirty) {
-        if (remoteEtag !== etag) {
-          status('Conflit : le cloud a changé pendant que cet appareil était hors ligne. Rien n’a été écrasé. Déconnecte puis reconnecte la clé pour choisir la version.');
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const response = await request('GET', secret);
+        const remoteEtag = response.status === 404 ? '' : response.headers.get('ETag');
+        if (!dirty && response.status === 200 && remoteEtag !== etag) {
+          const remote = await decrypt(await response.text(), secret);
+          if (dirty) continue;
+          applyPlants(remote);
+          setEtag(remoteEtag);
+          status('Plantes récupérées depuis le cloud.');
           return;
         }
-        await upload();
-      } else if (response.status === 200 && remoteEtag !== etag) {
-        const remote = await decrypt(await response.text(), secret);
-        if (dirty) { schedule(); return; }
-        applyPlants(remote);
-        setEtag(remoteEtag);
-        status('Plantes récupérées depuis le cloud.');
-      } else if (response.status === 404) {
-        setDirty(true);
-        await upload();
-      } else status('Toutes tes plantes sont synchronisées.');
+        if (!dirty && response.status === 200) { status('Toutes tes plantes sont synchronisées.'); return; }
+        if (!dirty) setDirty(true); // Premier envoi si le cloud est encore vide.
+
+        const local = getPlants();
+        const serial = editSerial;
+        const changes = { profiles: [...pending.profiles], plants: [...pending.plants] };
+        const remote = response.status === 200 && remoteEtag !== etag ? await decrypt(await response.text(), secret) : null;
+        const merged = remote ? mergeGardens(remote, local, changes) : local;
+        const saved = await request('PUT', secret, await encrypt(merged, secret), remoteEtag);
+        if (saved.status === 409) continue; // Un autre appareil a écrit entre le GET et le PUT.
+        setEtag(saved.headers.get('ETag'));
+        if (editSerial === serial) {
+          applyPlants(merged);
+          setPending({ profiles: [], plants: [] });
+          setDirty(false);
+          status('Toutes tes plantes sont synchronisées.');
+        } else {
+          applyPlants(mergeGardens(merged, getPlants(), pending));
+          setDirty(true);
+          schedule();
+        }
+        return;
+      }
+      status('Le cloud change encore sur un autre appareil. Nouvelle tentative automatique dans quelques secondes.');
+      schedule(3000);
     } catch (error) { status(`Synchronisation impossible : ${error.message}`); }
   })();
-  try { await running; } finally { running = null; }
+  try { await running; } finally {
+    running = null;
+    if (needsRerun) { needsRerun = false; schedule(rerunDelay); rerunDelay = 100; }
+  }
 }
-function schedule() { clearTimeout(timer); timer = setTimeout(() => { void synchronize(); }, 800); }
+function schedule(delay = 100) {
+  if (running) { needsRerun = true; rerunDelay = Math.max(rerunDelay, delay); return; }
+  clearTimeout(timer);
+  timer = setTimeout(() => { void synchronize(); }, delay);
+}
 
-export function syncOnChange() {
+export function syncOnChange(changes = {}) {
   if (!secret) return;
+  editSerial++;
+  setPending({
+    profiles: [...new Set([...pending.profiles, ...(changes.profiles || [])])],
+    plants: [...new Set([...pending.plants, ...(changes.plants || [])])],
+  });
   setDirty(true);
   status('Modifications en attente de synchronisation…');
   schedule();
@@ -143,15 +212,17 @@ export function initSync(handlers) {
         secret = token;
         localStorage.setItem(KEY_STORAGE, token);
         setEtag(response.headers.get('ETag'));
+        setPending({ profiles: [], plants: [] });
         setDirty(false);
         status('Connecté : plantes récupérées depuis le cloud. Copie la clé pour tes autres appareils.');
       } else {
         secret = token;
         localStorage.setItem(KEY_STORAGE, token);
         setEtag('');
+        setPending({ profiles: [], plants: [] });
         setDirty(true);
-        await upload();
-        status('Clé créée. Copie-la pour connecter tes autres appareils.');
+        await synchronize();
+        if (!dirty) status('Clé créée. Copie-la pour connecter tes autres appareils.');
       }
     } catch (error) { status(`Connexion impossible : ${error.message}`); }
   });
@@ -165,11 +236,12 @@ export function initSync(handlers) {
     if (!secret) return;
     secret = '';
     localStorage.removeItem(KEY_STORAGE);
-    setEtag(''); setDirty(false);
+    setEtag(''); setDirty(false); setPending({ profiles: [], plants: [] });
     $('#sync-key').value = '';
     status('Cet appareil est déconnecté. Ses plantes restent enregistrées localement.');
   });
   window.addEventListener('online', () => { void synchronize(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void synchronize(); });
+  setInterval(() => { if (secret && !document.hidden && navigator.onLine) void synchronize(); }, 20000);
   if (secret) void synchronize();
 }
