@@ -23,7 +23,7 @@
       </aside>
 
       <main id="main">
-        <header class="topbar"><span id="breadcrumb">MON ESPACE / VUE D’ENSEMBLE</span><div class="topbar-actions"><span id="today-label"></span><button type="button" id="sync-open" class="sync-trigger">☁ Synchronisation</button></div></header>
+        <header class="topbar"><span id="breadcrumb">MON ESPACE / VUE D’ENSEMBLE</span><div class="topbar-actions"><span id="today-label"></span><div class="profile-switcher"><label for="profile-select">Profil</label><select id="profile-select" aria-label="Choisir un profil"></select><button type="button" id="profile-add" title="Créer un profil" aria-label="Créer un profil">+</button><button type="button" id="profile-rename" title="Renommer le profil" aria-label="Renommer le profil">✎</button></div><button type="button" id="sync-open" class="sync-trigger">☁ Synchronisation</button></div></header>
         <section id="app" aria-live="polite"></section>
       </main>
     </div>
@@ -46,6 +46,14 @@
         <label class="field photo-field">Photo de la plante <input id="photo-input" type="file" accept="image/*" /><small>Optionnelle. La photo est réduite avant d’être enregistrée sur cet appareil.</small></label>
         <div id="form-error" class="form-error" role="alert"></div>
         <div class="dialog-actions"><button type="button" class="button ghost" id="cancel-dialog">Annuler</button><button class="button primary" type="submit">Enregistrer la plante <span>↗</span></button></div>
+      </form>
+    </dialog>
+    <dialog id="profile-dialog" aria-labelledby="profile-title">
+      <form id="profile-form" class="profile-panel">
+        <div class="dialog-head"><div><span class="eyebrow">UN ESPACE À SON NOM</span><h2 id="profile-title">Créer un profil</h2></div><button type="button" class="icon-button" id="profile-close" aria-label="Fermer">×</button></div>
+        <label class="field">Nom du profil <input id="profile-name" name="profileName" required maxlength="40" autocomplete="off" placeholder="Ex. : Driss" /></label>
+        <p id="profile-error" class="form-error" role="alert"></p>
+        <div class="dialog-actions"><button type="button" class="button ghost" id="profile-cancel">Annuler</button><button type="submit" class="button primary">Enregistrer</button></div>
       </form>
     </dialog>
     <dialog id="sync-dialog" aria-labelledby="sync-title">
