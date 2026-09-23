@@ -1,3 +1,5 @@
+import { initSync, syncOnChange } from './sync.js';
+
 const STORAGE_KEY = 'mon-jardin-plants-v1';
 const DAY = 86400000;
 const $ = (selector) => document.querySelector(selector);
@@ -38,6 +40,7 @@ function savePlants(next) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     plants = next;
     render();
+    syncOnChange();
     return true;
   } catch {
     $('#form-error').textContent = 'Stockage plein sur cet appareil. Essaie une photo plus légère ou supprime une plante.';
@@ -206,3 +209,11 @@ $('#cancel-dialog').addEventListener('click', () => $('#plant-dialog').close());
 $('#plant-dialog').addEventListener('click', (event) => { if (event.target === $('#plant-dialog')) $('#plant-dialog').close(); });
 window.addEventListener('hashchange', () => { view = ['accueil', 'plantes', 'calendrier'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'accueil'; render(); });
 render();
+initSync({
+  getPlants: () => plants,
+  applyPlants: (remote) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(remote));
+    plants = remote;
+    render();
+  },
+});
