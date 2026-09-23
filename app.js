@@ -69,7 +69,7 @@ function googleCalendarUrl(task) {
     dates: `${task.due.replaceAll('-', '')}/${end}`,
     details: task.kind === 'water' ? 'Rappel Mon Jardin : vérifie le terreau avant d’arroser.' : 'Rappel Mon Jardin : nettoyer les feuilles.',
   });
-  return `https://calendar.google.com/calendar/render?${params}`;
+  return `https://calendar.google.com/calendar/r/eventedit?${params}`;
 }
 function taskMarkup(task, calendarLink = false) {
   const late = task.due <= today();
