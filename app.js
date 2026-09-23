@@ -1,4 +1,4 @@
-import { initSync, syncOnChange } from './sync.js';
+import { initSync, syncOnChange } from './sync-v2.js';
 
 const STORAGE_KEY = 'mon-jardin-plants-v1';
 const GARDEN_KEY = 'mon-jardin-garden-v2';
