@@ -4,6 +4,17 @@ Une petite application web pour suivre ses plantes : photo, emplacement, lumièr
 
 Le **catalogue** propose 32 plantes d'intérieur et aromatiques, une recherche, des conseils indicatifs et un ajout prérempli (espèce, lumière et rappels pour vérifier le terreau). Un conseil du jour, parfois lié aux plantes du profil, apparaît sur l'accueil. Ces intervalles ne remplacent jamais la vérification de l'humidité réelle du terreau.
 
+## Analyse de santé des plantes
+
+La vue **Ma plante va mal** propose des premières vérifications sans IA, puis permet d'envoyer une photo facultative et des questions à l'API OpenAI. Les échanges restent dans l'onglet du navigateur : ils ne sont pas synchronisés avec R2. La photo est envoyée à OpenAI uniquement sur demande. Le modèle peut se tromper, surtout si la photo ne montre pas les racines et l'humidité du substrat.
+
+Configurer deux **Secrets** sur le Worker Cloudflare `monjardin` (Settings → Variables and Secrets, ou `npx wrangler secret put NOM`) :
+
+- `OPENAI_API_KEY` : clé de la [plateforme API OpenAI](https://platform.openai.com/api-keys), facturée séparément de l'abonnement ChatGPT. Ne jamais mettre cette clé dans le dépôt ou dans le navigateur.
+- `HEALTH_ACCESS_CODE` : code aléatoire d'au moins 16 caractères, idéalement 32 caractères ou plus. Le saisir dans la vue santé sur ses appareils. Il évite de rendre l'API payante accessible aux visiteurs du site public. Il est gardé dans `sessionStorage` jusqu'à la fermeture de l'onglet.
+
+La route `/api/health` ne lance aucun appel OpenAI sans les deux secrets et un code valide. Le Worker envoie `store: false` à l'API et limite les demandes à une photo réduite et 650 tokens de sortie. Les profils et leur contenu restent publics sur le site ; seul l'accès à l'analyse payante est protégé par le code.
+
 ## Démarrer
 
 Depuis le dossier du projet, lancer `python3 -m http.server 8000`, puis ouvrir `http://localhost:8000`. Aucun paquet à installer.
