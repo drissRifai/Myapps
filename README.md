@@ -2,6 +2,8 @@
 
 Une petite application web pour suivre ses plantes : photo, emplacement, lumière, arrosage été/hiver, nettoyage des feuilles et calendrier des soins. Elle fonctionne localement sans installation ; la synchronisation facultative utilise un Worker et R2. Elle peut être ajoutée à l'écran d'accueil du téléphone.
 
+Le **catalogue** propose 32 plantes d'intérieur et aromatiques, une recherche, des conseils indicatifs et un ajout prérempli (espèce, lumière et rappels pour vérifier le terreau). Un conseil du jour, parfois lié aux plantes du profil, apparaît sur l'accueil. Ces intervalles ne remplacent jamais la vérification de l'humidité réelle du terreau.
+
 ## Démarrer
 
 Depuis le dossier du projet, lancer `python3 -m http.server 8000`, puis ouvrir `http://localhost:8000`. Aucun paquet à installer.
