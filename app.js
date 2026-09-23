@@ -1,6 +1,8 @@
 import { initSync, syncOnChange } from './sync.js';
 
 const STORAGE_KEY = 'mon-jardin-plants-v1';
+const GARDEN_KEY = 'mon-jardin-garden-v2';
+const ACTIVE_PROFILE_KEY = 'mon-jardin-active-profile-v1';
 const DAY = 86400000;
 const $ = (selector) => document.querySelector(selector);
 const dateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -23,22 +25,37 @@ const PLANT_PRESETS = {
   cactus: { species: 'Cactus', summer: 21, winter: 45 },
 };
 
-function loadPlants() {
+function normalizeGarden(data) {
+  if (Array.isArray(data)) return { version: 2, profiles: [{ id: 'principal', name: 'Principal', plants: data.filter((item) => item && item.id && item.name) }] };
+  if (data?.version === 2 && Array.isArray(data.profiles) && data.profiles.length) {
+    const profiles = data.profiles.filter((profile) => profile?.id && profile?.name && Array.isArray(profile.plants)).map((profile) => ({
+      id: profile.id, name: profile.name, plants: profile.plants.filter((item) => item && item.id && item.name),
+    }));
+    if (profiles.length) return { version: 2, profiles };
+  }
+  return normalizeGarden([]);
+}
+function loadGarden() {
   try {
-    const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    return Array.isArray(data) ? data.filter((item) => item && item.id && item.name) : [];
-  } catch { return []; }
+    return normalizeGarden(JSON.parse(localStorage.getItem(GARDEN_KEY) || localStorage.getItem(STORAGE_KEY) || '[]'));
+  } catch { return normalizeGarden([]); }
 }
 
-let plants = loadPlants();
+let garden = loadGarden();
+let activeProfileId = localStorage.getItem(ACTIVE_PROFILE_KEY);
+if (!garden.profiles.some((profile) => profile.id === activeProfileId)) activeProfileId = garden.profiles[0].id;
+let plants = garden.profiles.find((profile) => profile.id === activeProfileId).plants;
 let view = ['accueil', 'plantes', 'calendrier'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'accueil';
 let calendarOffset = 0;
 let editingId = null;
 
-function savePlants(next) {
+function saveGarden(next, selectedId = activeProfileId) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    plants = next;
+    localStorage.setItem(GARDEN_KEY, JSON.stringify(next));
+    localStorage.setItem(ACTIVE_PROFILE_KEY, selectedId);
+    garden = next;
+    activeProfileId = selectedId;
+    plants = garden.profiles.find((profile) => profile.id === selectedId).plants;
     render();
     syncOnChange();
     return true;
@@ -46,6 +63,9 @@ function savePlants(next) {
     $('#form-error').textContent = 'Stockage plein sur cet appareil. Essaie une photo plus légère ou supprime une plante.';
     return false;
   }
+}
+function savePlants(next) {
+  return saveGarden({ ...garden, profiles: garden.profiles.map((profile) => profile.id === activeProfileId ? { ...profile, plants: next } : profile) });
 }
 
 function seasonAt(key) {
@@ -132,11 +152,49 @@ function calendarMarkup() {
 }
 
 function render() {
+  $('#profile-select').innerHTML = garden.profiles.map((profile) => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)}</option>`).join('');
+  $('#profile-select').value = activeProfileId;
   $('#today-label').textContent = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
   $('#breadcrumb').textContent = `MON ESPACE / ${{ accueil: 'VUE D’ENSEMBLE', plantes: 'MES PLANTES', calendrier: 'CALENDRIER' }[view]}`;
   document.querySelectorAll('.nav-link').forEach((link) => { link.classList.toggle('active', link.dataset.view === view); link.setAttribute('aria-current', link.dataset.view === view ? 'page' : 'false'); });
   $('#app').innerHTML = ({ accueil: homeMarkup, plantes: plantsMarkup, calendrier: calendarMarkup })[view]();
 }
+
+let profileDialogMode = 'add';
+function openProfileDialog(mode) {
+  profileDialogMode = mode;
+  $('#profile-form').reset();
+  $('#profile-error').textContent = '';
+  $('#profile-title').textContent = mode === 'rename' ? 'Renommer le profil' : 'Créer un profil';
+  if (mode === 'rename') $('#profile-name').value = garden.profiles.find((profile) => profile.id === activeProfileId).name;
+  $('#profile-dialog').showModal();
+  $('#profile-name').focus();
+}
+$('#profile-select').addEventListener('change', (event) => {
+  if (!garden.profiles.some((profile) => profile.id === event.target.value)) return;
+  activeProfileId = event.target.value;
+  localStorage.setItem(ACTIVE_PROFILE_KEY, activeProfileId);
+  plants = garden.profiles.find((profile) => profile.id === activeProfileId).plants;
+  render();
+});
+$('#profile-add').addEventListener('click', () => openProfileDialog('add'));
+$('#profile-rename').addEventListener('click', () => openProfileDialog('rename'));
+$('#profile-close').addEventListener('click', () => $('#profile-dialog').close());
+$('#profile-cancel').addEventListener('click', () => $('#profile-dialog').close());
+$('#profile-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const name = $('#profile-name').value.trim();
+  if (!name) { $('#profile-error').textContent = 'Donne un nom au profil.'; return; }
+  if (garden.profiles.some((profile) => profile.name.toLocaleLowerCase('fr') === name.toLocaleLowerCase('fr') && (profileDialogMode !== 'rename' || profile.id !== activeProfileId))) {
+    $('#profile-error').textContent = 'Ce nom est déjà utilisé.'; return;
+  }
+  const id = profileDialogMode === 'rename' ? activeProfileId : uid();
+  const profiles = profileDialogMode === 'rename'
+    ? garden.profiles.map((profile) => profile.id === id ? { ...profile, name } : profile)
+    : [...garden.profiles, { id, name, plants: [] }];
+  if (saveGarden({ ...garden, profiles }, id)) $('#profile-dialog').close();
+  else $('#profile-error').textContent = 'Impossible d’enregistrer ce profil sur cet appareil.';
+});
 
 function openDialog(plant = null) {
   editingId = plant?.id || null;
@@ -210,10 +268,14 @@ $('#plant-dialog').addEventListener('click', (event) => { if (event.target === $
 window.addEventListener('hashchange', () => { view = ['accueil', 'plantes', 'calendrier'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'accueil'; render(); });
 render();
 initSync({
-  getPlants: () => plants,
+  getPlants: () => garden,
+  hasData: () => garden.profiles.length > 1 || garden.profiles.some((profile) => profile.plants.length || profile.name !== 'Principal'),
   applyPlants: (remote) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(remote));
-    plants = remote;
+    const next = normalizeGarden(remote);
+    localStorage.setItem(GARDEN_KEY, JSON.stringify(next));
+    garden = next;
+    if (!garden.profiles.some((profile) => profile.id === activeProfileId)) activeProfileId = garden.profiles[0].id;
+    plants = garden.profiles.find((profile) => profile.id === activeProfileId).plants;
     render();
   },
 });
