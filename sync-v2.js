@@ -1,15 +1,18 @@
 const KEY_STORAGE = 'mon-jardin-sync-key-v1';
-const QUEUE_STORAGE = 'mon-jardin-sync-queue-v2';
+const QUEUE_STORAGE = 'mon-jardin-sync-queue-v3';
+const PREVIOUS_QUEUE_STORAGE = 'mon-jardin-sync-queue-v2';
+const JOINED_STORAGE = 'mon-jardin-shared-joined-v1';
+// Shared garden identifier, intentionally public: anyone with this site's URL can edit every profile.
+const SHARED_KEY = 'WGNgNwW7sjM25COWHMmO_a-EQP3jeHhxOfZkid7C7vU';
 const OLD_DIRTY_STORAGE = 'mon-jardin-sync-dirty-v1';
 const OLD_PENDING_STORAGE = 'mon-jardin-sync-pending-v1';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const $ = (selector) => document.querySelector(selector);
-let secret = localStorage.getItem(KEY_STORAGE) || '';
+const secret = SHARED_KEY;
 let queue = readQueue();
 let getGarden;
 let applyGarden;
-let hasData;
 let running = null;
 let timer;
 let rerun = false;
@@ -27,9 +30,9 @@ function setQueue(items) {
   $('#sync-open').textContent = queue.length ? `☁ En attente (${queue.length})` : '☁ Synchronisation';
 }
 function status(message, problem = false) {
-  $('#sync-status').textContent = message;
+  $('#sync-open').title = `${message} Cliquer pour réessayer.`;
   if (problem) $('#sync-open').textContent = '☁ À vérifier';
-  else if (!queue.length && secret) $('#sync-open').textContent = '☁ Synchronisé';
+  else if (!queue.length) $('#sync-open').textContent = '☁ Synchronisé';
 }
 function base64url(bytes) {
   let binary = '';
@@ -160,9 +163,13 @@ function migrateOldPending(remote) {
   localStorage.removeItem(OLD_DIRTY_STORAGE);
   localStorage.removeItem('mon-jardin-sync-etag-v1');
 }
-async function sendMarker(marker, token) {
-  const operation = operationFor(marker, getGarden());
-  const response = await fetch(`/api/ops/${marker.id}`, {
+async function migrationId(source, kind, id) {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(`${source}:${kind}:${id}`)));
+  const hex = Array.from(digest.slice(0, 16), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+async function sendOperation(id, operation, token) {
+  const response = await fetch(`/api/ops/${id}`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: await encrypt(operation, token),
@@ -173,6 +180,52 @@ async function sendMarker(marker, token) {
     throw new Error(details.error || `Envoi refusé (${response.status}).`);
   }
 }
+async function migratePreviousGarden(shared) {
+  const previousKey = localStorage.getItem(KEY_STORAGE);
+  if (!previousKey || previousKey === secret) {
+    if (!localStorage.getItem(JOINED_STORAGE)) {
+      const local = getGarden();
+      const changes = { profiles: [], plants: [] };
+      for (const profile of local.profiles) {
+        const other = shared.profiles.find((item) => item.id === profile.id);
+        if (!other && (profile.id !== 'principal' || profile.plants.length || profile.name !== 'Principal')) changes.profiles.push(profile.id);
+        for (const plant of profile.plants) {
+          if (!other?.plants.some((item) => item.id === plant.id)) changes.plants.push(`${profile.id}:${plant.id}`);
+        }
+      }
+      if (changes.profiles.length || changes.plants.length) addMarkers(changes);
+      localStorage.setItem(JOINED_STORAGE, '1');
+    }
+    return;
+  }
+  status('Reprise des plantes déjà enregistrées…');
+  const previous = await loadRemote(previousKey);
+  for (const profile of previous.profiles) {
+    const existing = shared.profiles.find((item) => item.id === profile.id);
+    if (!existing || (existing.name === 'Principal' && profile.name !== 'Principal')) {
+      await sendOperation(await migrationId(previousKey, 'profile', profile.id), { kind: 'profile', profile: { id: profile.id, name: profile.name } }, secret);
+    }
+    for (const plant of profile.plants) {
+      if (!existing?.plants.some((item) => item.id === plant.id)) {
+        await sendOperation(await migrationId(previousKey, 'plant', `${profile.id}:${plant.id}`), { kind: 'plant', profileId: profile.id, plant }, secret);
+      }
+    }
+  }
+  migrateOldPending(previous);
+  try {
+    const oldQueue = JSON.parse(localStorage.getItem(PREVIOUS_QUEUE_STORAGE) || '[]');
+    if (Array.isArray(oldQueue)) addMarkers({
+      profiles: oldQueue.filter((item) => item.kind === 'profile').map((item) => item.profileId),
+      plants: oldQueue.filter((item) => item.kind === 'plant').map((item) => item.key),
+    });
+  } catch { throw new Error('Anciennes modifications en attente illisibles.'); }
+  localStorage.removeItem(PREVIOUS_QUEUE_STORAGE);
+  localStorage.removeItem(KEY_STORAGE);
+  localStorage.setItem(JOINED_STORAGE, '1');
+}
+async function sendMarker(marker, token) {
+  await sendOperation(marker.id, operationFor(marker, getGarden()), token);
+}
 async function synchronize() {
   if (!secret) { status('Crée ou colle une clé pour activer la synchronisation.'); return; }
   if (running) { rerun = true; return running; }
@@ -180,9 +233,10 @@ async function synchronize() {
   running = (async () => {
     status('Synchronisation en cours…');
     try {
-      const remote = await loadRemote(token);
+      let remote = await loadRemote(token);
       if (token !== secret) return;
-      migrateOldPending(remote);
+      await migratePreviousGarden(remote);
+      remote = await loadRemote(token);
       applyGarden(queue.length ? overlay(remote, getGarden(), queue) : remote);
       let sent = 0;
       while (queue.length && sent < 100 && token === secret) {
@@ -215,56 +269,10 @@ export function syncOnChange(changes = {}) {
 export function initSync(handlers) {
   getGarden = handlers.getPlants;
   applyGarden = handlers.applyPlants;
-  hasData = handlers.hasData;
   setQueue(queue);
-  $('#sync-open').addEventListener('click', () => {
-    $('#sync-key').value = secret;
-    $('#sync-dialog').showModal();
-    status(secret ? (queue.length ? 'Modifications en attente.' : 'Clé connectée à cet appareil.') : 'Aucune clé connectée.');
-  });
-  $('#sync-close').addEventListener('click', () => $('#sync-dialog').close());
-  $('#sync-dialog').addEventListener('click', (event) => { if (event.target === $('#sync-dialog')) $('#sync-dialog').close(); });
-  $('#sync-connect').addEventListener('click', async () => {
-    if (running) return;
-    const token = $('#sync-key').value.trim() || base64url(crypto.getRandomValues(new Uint8Array(32)));
-    $('#sync-key').value = token;
-    if (!/^[A-Za-z0-9_-]{43}$/.test(token)) { status('Cette clé est invalide.'); return; }
-    if (token === secret) { void synchronize(); return; }
-    if (queue.length) { status('Attends que les modifications en attente soient envoyées avant de changer de clé.', true); return; }
-    status('Connexion en cours…');
-    try {
-      const remote = await loadRemote(token);
-      const remoteHasData = remote.profiles.some((profile) => profile.plants.length || profile.name !== 'Principal') || remote.profiles.length > 1;
-      if (remoteHasData && hasData() && JSON.stringify(getGarden()) !== JSON.stringify(remote) &&
-        !confirm('Cette clé contient déjà des profils et des plantes. Remplacer les données locales par celles du cloud ?')) {
-        status('Connexion annulée. Les plantes locales sont conservées.'); return;
-      }
-      secret = token;
-      localStorage.setItem(KEY_STORAGE, token);
-      setQueue([]);
-      if (remoteHasData) applyGarden(remote);
-      else addMarkers(allMarkers(getGarden()));
-      await synchronize();
-      if (!queue.length) status('Clé connectée. Copie-la pour tes autres appareils.');
-    } catch (error) { status(`Connexion impossible : ${error.message}`, true); }
-  });
-  $('#sync-copy').addEventListener('click', async () => {
-    if (!secret) { status('Connecte d’abord une clé.'); return; }
-    try { await navigator.clipboard.writeText(secret); status('Clé copiée. Conserve-la en lieu sûr.'); }
-    catch { status('Copie la clé affichée dans le champ ci-dessus.'); }
-  });
-  $('#sync-now').addEventListener('click', () => { void synchronize(); });
-  $('#sync-disconnect').addEventListener('click', () => {
-    if (!secret) return;
-    if (queue.length && !confirm('Des modifications ne sont pas encore synchronisées. Déconnecter cet appareil quand même ?')) return;
-    secret = '';
-    localStorage.removeItem(KEY_STORAGE);
-    setQueue([]);
-    $('#sync-key').value = '';
-    status('Cet appareil est déconnecté. Ses plantes restent enregistrées localement.');
-  });
+  $('#sync-open').addEventListener('click', () => { void synchronize(); });
   window.addEventListener('online', () => { void synchronize(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void synchronize(); });
   setInterval(() => { if (secret && !document.hidden && navigator.onLine) void synchronize(); }, 20000);
-  if (secret) void synchronize();
+  void synchronize();
 }
