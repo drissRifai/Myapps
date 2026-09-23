@@ -23,7 +23,7 @@
       </aside>
 
       <main id="main">
-        <header class="topbar"><span id="breadcrumb">MON ESPACE / VUE D’ENSEMBLE</span><div class="topbar-actions"><span id="today-label"></span><div class="profile-switcher"><label for="profile-select">Profil</label><select id="profile-select" aria-label="Choisir un profil"></select><button type="button" id="profile-add" title="Créer un profil" aria-label="Créer un profil">+</button><button type="button" id="profile-rename" title="Renommer le profil" aria-label="Renommer le profil">✎</button></div><button type="button" id="sync-open" class="sync-trigger">☁ Synchronisation</button></div></header>
+        <header class="topbar"><span id="breadcrumb">MON ESPACE / VUE D’ENSEMBLE</span><div class="topbar-actions"><span id="today-label"></span><div class="profile-switcher"><label for="profile-select">Profil</label><select id="profile-select" aria-label="Choisir un profil"></select><button type="button" id="profile-add" title="Créer un profil" aria-label="Créer un profil">+</button><button type="button" id="profile-rename" title="Renommer le profil" aria-label="Renommer le profil">✎</button></div><button type="button" id="sync-open" class="sync-trigger" title="Cliquer pour réessayer la synchronisation" aria-label="État de la synchronisation ; cliquer pour réessayer">☁ Synchronisation</button></div></header>
         <section id="app" aria-live="polite"></section>
       </main>
     </div>
@@ -55,16 +55,6 @@
         <p id="profile-error" class="form-error" role="alert"></p>
         <div class="dialog-actions"><button type="button" class="button ghost" id="profile-cancel">Annuler</button><button type="submit" class="button primary">Enregistrer</button></div>
       </form>
-    </dialog>
-    <dialog id="sync-dialog" aria-labelledby="sync-title">
-      <div class="sync-panel">
-        <div class="dialog-head"><div><span class="eyebrow">MES PLANTES PARTOUT</span><h2 id="sync-title">Synchronisation</h2></div><button type="button" class="icon-button" id="sync-close" aria-label="Fermer">×</button></div>
-        <p>Crée une clé sur cet appareil, puis colle-la sur l’autre appareil pour retrouver tes plantes et leurs photos.</p>
-        <label class="field">Clé de synchronisation <input id="sync-key" type="text" autocomplete="off" spellcheck="false" placeholder="Colle ici ta clé, ou crée-en une" /></label>
-        <p class="sync-note">Garde cette clé privée et en lieu sûr : elle donne accès à tes données. Sans elle, les données stockées dans R2 ne pourront pas être récupérées.</p>
-        <div class="sync-actions"><button type="button" class="button primary" id="sync-connect">Créer / connecter</button><button type="button" class="button ghost" id="sync-copy">Copier la clé</button><button type="button" class="button ghost" id="sync-now">Synchroniser</button><button type="button" class="button ghost" id="sync-disconnect">Déconnecter cet appareil</button></div>
-        <p id="sync-status" class="sync-status" role="status" aria-live="polite"></p>
-      </div>
     </dialog>
     <script type="module" src="app.js"></script>
   </body>
