@@ -49,7 +49,7 @@ let view = ['accueil', 'plantes', 'calendrier'].includes(location.hash.slice(1))
 let calendarOffset = 0;
 let editingId = null;
 
-function saveGarden(next, selectedId = activeProfileId) {
+function saveGarden(next, selectedId = activeProfileId, changes = {}) {
   try {
     localStorage.setItem(GARDEN_KEY, JSON.stringify(next));
     localStorage.setItem(ACTIVE_PROFILE_KEY, selectedId);
@@ -57,7 +57,7 @@ function saveGarden(next, selectedId = activeProfileId) {
     activeProfileId = selectedId;
     plants = garden.profiles.find((profile) => profile.id === selectedId).plants;
     render();
-    syncOnChange();
+    syncOnChange(changes);
     return true;
   } catch {
     $('#form-error').textContent = 'Stockage plein sur cet appareil. Essaie une photo plus légère ou supprime une plante.';
@@ -65,7 +65,11 @@ function saveGarden(next, selectedId = activeProfileId) {
   }
 }
 function savePlants(next) {
-  return saveGarden({ ...garden, profiles: garden.profiles.map((profile) => profile.id === activeProfileId ? { ...profile, plants: next } : profile) });
+  const before = new Map(plants.map((plant) => [plant.id, plant]));
+  const changed = next.filter((plant) => before.get(plant.id) !== plant).map((plant) => `${activeProfileId}:${plant.id}`);
+  const remaining = new Set(next.map((plant) => plant.id));
+  const removed = plants.filter((plant) => !remaining.has(plant.id)).map((plant) => `${activeProfileId}:${plant.id}`);
+  return saveGarden({ ...garden, profiles: garden.profiles.map((profile) => profile.id === activeProfileId ? { ...profile, plants: next } : profile) }, activeProfileId, { plants: [...changed, ...removed] });
 }
 
 function seasonAt(key) {
@@ -192,7 +196,7 @@ $('#profile-form').addEventListener('submit', (event) => {
   const profiles = profileDialogMode === 'rename'
     ? garden.profiles.map((profile) => profile.id === id ? { ...profile, name } : profile)
     : [...garden.profiles, { id, name, plants: [] }];
-  if (saveGarden({ ...garden, profiles }, id)) $('#profile-dialog').close();
+  if (saveGarden({ ...garden, profiles }, id, { profiles: [id] })) $('#profile-dialog').close();
   else $('#profile-error').textContent = 'Impossible d’enregistrer ce profil sur cet appareil.';
 });
 
