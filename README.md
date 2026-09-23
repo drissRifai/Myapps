@@ -21,6 +21,10 @@ Le fichier `wrangler.jsonc` porte le nom du Worker existant (`monjardin`) et du 
 
 Les données, photos incluses, sont chiffrées dans le navigateur avec AES-GCM avant envoi. Le bucket ne reçoit qu'un document chiffré, identifié par une empreinte de la clé. La clé est conservée dans le stockage local de chaque navigateur et envoyée uniquement à la fonction du même site via HTTPS. Une sauvegarde est limitée à 8 Mo. Les modifications locales sont envoyées après édition ; les autres appareils récupèrent le cloud à l'ouverture ou au retour sur l'onglet. Si deux appareils changent des données hors ligne, l'application bloque l'écrasement et affiche un conflit. Déconnecter puis reconnecter la clé permet de choisir la version cloud ; conserver une copie locale avant de confirmer son remplacement.
 
+## Profils
+
+Le menu **Profil** permet de créer et de renommer des espaces séparés pour les plantes. Les plantes déjà enregistrées passent dans le profil **Principal**, que l'on peut renommer. Une sauvegarde R2 de l'ancienne version (simple liste de plantes) est lue de la même façon. Tous les profils sont stockés ensemble sous la même clé de synchronisation : il n'y a ni mot de passe ni séparation des droits entre eux. Le profil sélectionné est mémorisé sur chaque appareil, indépendamment des autres.
+
 ## Données et limites du MVP
 
 Les données et photos sont enregistrées **dans le navigateur de cet appareil** avec `localStorage`. Sans le binding R2 et une clé connectée, elles ne se synchronisent pas entre téléphone et ordinateur. Elles peuvent disparaître si les données du site sont effacées. Les photos sont réduites à 1 000 pixels avant stockage. Un export/import indépendant du cloud reste une prochaine étape utile.
