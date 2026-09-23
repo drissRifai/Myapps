@@ -7,3 +7,9 @@ README.md
 .gitignore
 .assetsignore
 connexion-chatgpt.txt
+.wrangler/
+.env*
+.dev.vars*
+node_modules/
+package.json
+package-lock.json
