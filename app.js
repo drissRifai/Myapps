@@ -9,6 +9,17 @@ const daysBetween = (a, b) => Math.round((parseDate(a).getTime() - parseDate(b).
 const formatDate = (key, options = { day: 'numeric', month: 'long' }) => new Intl.DateTimeFormat('fr-FR', options).format(parseDate(key));
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 const uid = () => crypto.randomUUID();
+// Intervalles de vérification indicatifs pour plantes d'intérieur, pas des consignes d'arrosage automatique.
+const PLANT_PRESETS = {
+  monstera: { species: 'Monstera deliciosa', summer: 7, winter: 14 },
+  pothos: { species: 'Pothos', summer: 7, winter: 14 },
+  spathiphyllum: { species: 'Spathiphyllum', summer: 5, winter: 10 },
+  ficus: { species: 'Ficus elastica', summer: 7, winter: 14 },
+  sansevieria: { species: 'Sansevieria', summer: 14, winter: 30 },
+  aloe: { species: 'Aloe vera', summer: 14, winter: 30 },
+  succulente: { species: 'Succulente', summer: 14, winter: 30 },
+  cactus: { species: 'Cactus', summer: 21, winter: 45 },
+};
 
 function loadPlants() {
   try {
@@ -130,8 +141,18 @@ function openDialog(plant = null) {
   $('#dialog-title').textContent = plant ? 'Modifier la plante' : 'Ajouter une plante';
   form.elements.lastWatered.value = plant?.lastWatered || today();
   for (const field of ['name', 'species', 'location', 'light', 'summer', 'winter', 'clean']) if (plant?.[field] !== undefined) form.elements[field].value = plant[field];
+  $('#plant-preset').value = Object.keys(PLANT_PRESETS).find((key) => PLANT_PRESETS[key].species === plant?.species) || '';
   $('#plant-dialog').showModal();
 }
+
+$('#plant-preset').addEventListener('change', (event) => {
+  const preset = PLANT_PRESETS[event.target.value];
+  if (!preset) return;
+  const form = $('#plant-form');
+  form.elements.species.value = preset.species;
+  form.elements.summer.value = preset.summer;
+  form.elements.winter.value = preset.winter;
+});
 
 async function shrinkPhoto(file) {
   if (!file.type.startsWith('image/')) throw new Error('Choisis une image pour la photo.');
