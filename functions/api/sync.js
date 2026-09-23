@@ -1,4 +1,3 @@
-const MAX_BYTES = 8 * 1024 * 1024;
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const headers = { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' };
 
@@ -25,22 +24,6 @@ export async function onRequest({ request, env }) {
     return new Response(object.body, { headers: { ...headers, ETag: object.httpEtag } });
   }
 
-  if (request.method === 'PUT') {
-    const length = Number(request.headers.get('Content-Length'));
-    if (length > MAX_BYTES) return reply('Sauvegarde trop volumineuse (8 Mo maximum).', 413);
-    const body = await request.arrayBuffer();
-    if (body.byteLength > MAX_BYTES) return reply('Sauvegarde trop volumineuse (8 Mo maximum).', 413);
-    let payload;
-    try { payload = JSON.parse(new TextDecoder().decode(body)); } catch { return reply('Sauvegarde invalide.', 400); }
-    if (payload?.v !== 1 || typeof payload.iv !== 'string' || typeof payload.data !== 'string') return reply('Sauvegarde invalide.', 400);
-
-    const previous = request.headers.get('If-Match');
-    const creating = request.headers.get('If-None-Match') === '*';
-    if (!creating && !/^"[a-f0-9]+"$/.test(previous || '')) return reply('Version de sauvegarde manquante.', 428);
-    const onlyIf = creating ? new Headers({ 'If-None-Match': '*' }) : new Headers({ 'If-Match': previous });
-    const object = await env.GARDEN_BUCKET.put(key, body, { onlyIf, httpMetadata: { contentType: 'application/json' } });
-    if (!object) return reply('La sauvegarde a changé sur un autre appareil. Rien n’a été écrasé.', 409);
-    return new Response(JSON.stringify({ ok: true }), { headers: { ...headers, ETag: object.httpEtag } });
-  }
-  return reply('Méthode non autorisée.', 405, { Allow: 'GET, PUT' });
+  if (request.method === 'PUT') return reply('Ancienne synchronisation désactivée. Recharge la page pour utiliser la nouvelle version.', 410);
+  return reply('Méthode non autorisée.', 405, { Allow: 'GET' });
 }
