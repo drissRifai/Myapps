@@ -10,4 +10,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --check app.js
+      - run: |
+          node --check app.js
+          node --check sync.js
+          node --check functions/api/sync.js
