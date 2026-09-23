@@ -5,3 +5,7 @@
 @media(max-width:700px){.task-row:has(.calendar-link){flex-wrap:wrap}.task-row .calendar-link{margin-left:auto;font-size:10px}.task-row:has(.calendar-link) .due{margin-left:auto}}
 
 .preset-help{font-size:11px;line-height:1.5;color:#778a75;margin:14px 0 2px}
+
+.plant-card{position:relative}.plant-tooltip{position:absolute;z-index:1;top:12px;left:12px;right:12px;display:grid;gap:7px;padding:15px;border:1px solid #d6e4d0;border-radius:10px;background:#fffff8;box-shadow:0 12px 28px #173d2a30;color:#425d45;font-size:11px;line-height:1.35;visibility:hidden;opacity:0;transform:translateY(5px);transition:opacity .15s,transform .15s}.plant-tooltip strong{font:18px Fraunces,serif;color:#294d34;margin-bottom:3px}.plant-card.info-open .plant-tooltip{visibility:visible;opacity:1;transform:none}.plant-actions .info-button{color:#315b3b}@media(hover:hover){.plant-card:hover .plant-tooltip{visibility:visible;opacity:1;transform:none}}@media(max-width:700px){.plant-actions{flex-wrap:wrap;gap:12px}}
+
+@media(max-width:700px){.plant-tooltip{position:static;display:none;visibility:visible;opacity:1;transform:none;margin:10px}.plant-card.info-open .plant-tooltip{display:grid}}
