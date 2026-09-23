@@ -1,5 +1,6 @@
 import { initSync, syncOnChange } from './sync-v2.js';
 import { PLANT_CATALOG, CARE_TIPS } from './plant-catalog.js';
+import { renderHealth, initHealth } from './health-view.js';
 
 const STORAGE_KEY = 'mon-jardin-plants-v1';
 const GARDEN_KEY = 'mon-jardin-garden-v2';
@@ -38,7 +39,7 @@ let garden = loadGarden();
 let activeProfileId = localStorage.getItem(ACTIVE_PROFILE_KEY);
 if (!garden.profiles.some((profile) => profile.id === activeProfileId)) activeProfileId = garden.profiles[0].id;
 let plants = garden.profiles.find((profile) => profile.id === activeProfileId).plants;
-let view = ['accueil', 'plantes', 'calendrier', 'catalogue'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'accueil';
+let view = ['accueil', 'plantes', 'calendrier', 'catalogue', 'sante'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'accueil';
 let calendarOffset = 0;
 let editingId = null;
 let catalogQuery = '';
@@ -128,7 +129,7 @@ function homeMarkup() {
   const dailyTip = guide ? `${featured.name} : ${guide.tip}` : CARE_TIPS[day % CARE_TIPS.length];
   return `${header('TON JARDIN PERSONNEL', 'Bonjour, jardinier <em>✳</em>', 'Un petit coup d’œil à tes plantes et aux soins du moment.')}
     <div class="stats"><div class="stat"><span>MES PLANTES</span><strong>${plants.length.toString().padStart(2, '0')}</strong><small>petites vies à chouchouter</small></div><div class="stat highlight"><span>À FAIRE AUJOURD’HUI</span><strong>${due.length.toString().padStart(2, '0')}</strong><small>${due.length ? 'soins qui t’attendent' : 'tout est à jour, bravo !'}</small></div><div class="stat"><span>PROCHAIN SOIN</span><strong class="stat-date">${tasks.length ? formatDate(tasks[0].due, { day: 'numeric', month: 'short' }) : '—'}</strong><small>${tasks.length ? escapeHtml(tasks[0].plant.name) : 'ajoute une plante'}</small></div></div>
-    <aside class="daily-tip"><span>✳ LE CONSEIL DU JOUR</span><p>${escapeHtml(dailyTip)}</p><a href="#catalogue">Explorer le catalogue ↗</a></aside>
+    <aside class="daily-tip"><span>✳ LE CONSEIL DU JOUR</span><p>${escapeHtml(dailyTip)}</p><a href="#catalogue">Explorer le catalogue ↗</a><a class="daily-health-link" href="#sante">Une plante va mal ? ↗</a></aside>
     <div class="section-title"><div><span class="eyebrow">À NE PAS OUBLIER</span><h2>Les soins à venir</h2></div><a href="#calendrier">Voir le calendrier ↗</a></div>
     <div class="task-list">${tasks.length ? tasks.slice(0, 6).map(taskMarkup).join('') : emptyMarkup('Ajoute ta première plante pour voir ses soins apparaître.')}</div>
     <div class="section-title second"><div><span class="eyebrow">LA PETITE JUNGLE</span><h2>Tes plantes</h2></div><a href="#plantes">Voir toutes les plantes ↗</a></div>
@@ -174,9 +175,9 @@ function render() {
   $('#profile-select').innerHTML = garden.profiles.map((profile) => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)}</option>`).join('');
   $('#profile-select').value = activeProfileId;
   $('#today-label').textContent = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
-  $('#breadcrumb').textContent = `MON ESPACE / ${{ accueil: 'VUE D’ENSEMBLE', plantes: 'MES PLANTES', calendrier: 'CALENDRIER', catalogue: 'CATALOGUE' }[view]}`;
+  $('#breadcrumb').textContent = `MON ESPACE / ${{ accueil: 'VUE D’ENSEMBLE', plantes: 'MES PLANTES', calendrier: 'CALENDRIER', catalogue: 'CATALOGUE', sante: 'SANTÉ DES PLANTES' }[view]}`;
   document.querySelectorAll('.nav-link').forEach((link) => { link.classList.toggle('active', link.dataset.view === view); link.setAttribute('aria-current', link.dataset.view === view ? 'page' : 'false'); });
-  $('#app').innerHTML = ({ accueil: homeMarkup, plantes: plantsMarkup, calendrier: calendarMarkup, catalogue: catalogueMarkup })[view]();
+  $('#app').innerHTML = ({ accueil: homeMarkup, plantes: plantsMarkup, calendrier: calendarMarkup, catalogue: catalogueMarkup, sante: renderHealth })[view]();
 }
 
 let profileDialogMode = 'add';
@@ -307,7 +308,8 @@ document.addEventListener('click', (event) => {
 $('#close-dialog').addEventListener('click', () => $('#plant-dialog').close());
 $('#cancel-dialog').addEventListener('click', () => $('#plant-dialog').close());
 $('#plant-dialog').addEventListener('click', (event) => { if (event.target === $('#plant-dialog')) $('#plant-dialog').close(); });
-window.addEventListener('hashchange', () => { view = ['accueil', 'plantes', 'calendrier', 'catalogue'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'accueil'; render(); });
+window.addEventListener('hashchange', () => { view = ['accueil', 'plantes', 'calendrier', 'catalogue', 'sante'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'accueil'; render(); });
+initHealth({ getPlants: () => plants });
 render();
 initSync({
   getPlants: () => garden,
