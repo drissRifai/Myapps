@@ -13,6 +13,8 @@ jobs:
       - run: |
           node --check app.js
           node --check plant-catalog.js
+          node --check health-view.js
+          node --check functions/api/health.js
           node --check sync-v2.js
           node --check functions/api/ops.js
           node --check functions/api/sync.js
