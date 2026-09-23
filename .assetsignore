@@ -1,0 +1,9 @@
+# Server-only code and repository metadata must not be published as static files.
+functions/
+worker.js
+wrangler.jsonc
+README.md
+.github/
+.gitignore
+.assetsignore
+connexion-chatgpt.txt
