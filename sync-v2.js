@@ -132,7 +132,7 @@ async function loadRemote(token) {
   return garden;
 }
 function migrateOldPending(remote) {
-  if (queue.length || localStorage.getItem(OLD_DIRTY_STORAGE) !== '1') return;
+  if (localStorage.getItem(OLD_DIRTY_STORAGE) !== '1') return;
   const local = getGarden();
   let old = {};
   try { old = JSON.parse(localStorage.getItem(OLD_PENDING_STORAGE) || '{}'); } catch { /* Ancienne file corrompue. */ }
