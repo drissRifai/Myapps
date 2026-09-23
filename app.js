@@ -89,7 +89,9 @@ function taskMarkup(task, calendarLink = false) {
 function plantMarkup(plant) {
   const next = wateringDue(plant);
   const photo = plant.photo ? `<img src="${plant.photo}" alt="Photo de ${escapeHtml(plant.name)}" />` : `<span aria-hidden="true">🌿</span>`;
-  return `<article class="plant-card"><div class="plant-photo">${photo}</div><div class="plant-body"><span class="plant-location">⌁ ${escapeHtml(plant.location || 'Sans emplacement')}</span><h3>${escapeHtml(plant.name)}</h3><p class="species">${escapeHtml(plant.species || 'Espèce non renseignée')}</p><div class="plant-divider"></div><div class="plant-meta"><span>☀ ${escapeHtml(({ indirecte: 'Lumière indirecte', directe: 'Soleil direct', faible: 'Lumière faible' })[plant.light] || 'Lumière indirecte')}</span><span>💧 ${dueText(next)}</span></div><div class="plant-actions"><button type="button" data-edit="${plant.id}">Modifier</button><button type="button" data-delete="${plant.id}" class="delete">Supprimer</button></div></div></article>`;
+  const light = ({ indirecte: 'Lumière indirecte', directe: 'Soleil direct', faible: 'Lumière faible' })[plant.light] || 'Lumière indirecte';
+  const nextClean = plant.clean > 0 ? addDays(plant.lastCleaned || plant.createdAt || today(), Number(plant.clean)) : null;
+  return `<article class="plant-card"><div class="plant-photo">${photo}</div><div class="plant-tooltip" id="info-${plant.id}" role="tooltip"><strong>✳ Fiche rapide</strong><span>⌁ ${escapeHtml(plant.location || 'Emplacement non renseigné')}</span><span>☀ ${escapeHtml(light)}</span><span>💧 Vérifier le terreau : tous les ${Number(plant.summer) || 7} j en été · ${Number(plant.winter) || 14} j en hiver</span><span>Prochain arrosage à vérifier : ${formatDate(next)}</span>${nextClean ? `<span>Feuilles à nettoyer : ${formatDate(nextClean)}</span>` : ''}</div><div class="plant-body"><span class="plant-location">⌁ ${escapeHtml(plant.location || 'Sans emplacement')}</span><h3>${escapeHtml(plant.name)}</h3><p class="species">${escapeHtml(plant.species || 'Espèce non renseignée')}</p><div class="plant-divider"></div><div class="plant-meta"><span>☀ ${escapeHtml(light)}</span><span>💧 ${dueText(next)}</span></div><div class="plant-actions"><button type="button" class="info-button" data-info="${plant.id}" aria-expanded="false" aria-controls="info-${plant.id}">ⓘ Infos</button><button type="button" data-edit="${plant.id}">Modifier</button><button type="button" data-delete="${plant.id}" class="delete">Supprimer</button></div></div></article>`;
 }
 
 function emptyMarkup(message) { return `<div class="empty"><div class="empty-illustration">✳</div><h3>Ça va pousser ici.</h3><p>${message}</p><button class="button primary" data-add>Ajouter ma première plante <span>↗</span></button></div>`; }
@@ -182,6 +184,11 @@ $('#plant-form').addEventListener('submit', async (event) => {
 document.addEventListener('click', (event) => {
   const target = event.target.closest('button'); if (!target) return;
   if (target.matches('[data-add]')) openDialog();
+  if (target.dataset.info) {
+    const card = target.closest('.plant-card');
+    const open = card.classList.toggle('info-open');
+    target.setAttribute('aria-expanded', String(open));
+  }
   if (target.dataset.edit) openDialog(plants.find((plant) => plant.id === target.dataset.edit));
   if (target.dataset.delete) {
     const plant = plants.find((item) => item.id === target.dataset.delete);
