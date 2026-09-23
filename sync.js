@@ -9,6 +9,7 @@ let etag = localStorage.getItem(ETAG_STORAGE) || '';
 let dirty = localStorage.getItem(DIRTY_STORAGE) === '1';
 let getPlants;
 let applyPlants;
+let hasData;
 let running = null;
 let timer;
 
@@ -45,9 +46,12 @@ async function decrypt(payload, token) {
   const item = JSON.parse(payload);
   if (item.v !== 1) throw new Error('Format de sauvegarde inconnu.');
   const data = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromBase64url(item.iv) }, await encryptionKey(token), fromBase64url(item.data));
-  const plants = JSON.parse(decoder.decode(data));
-  if (!Array.isArray(plants) || plants.some((plant) => !plant?.id || !plant?.name)) throw new Error('Données de plantes invalides.');
-  return plants;
+  const snapshot = JSON.parse(decoder.decode(data));
+  const validPlants = (plants) => Array.isArray(plants) && plants.every((plant) => plant?.id && plant?.name);
+  if (Array.isArray(snapshot) && validPlants(snapshot)) return snapshot; // Sauvegardes de l'ancienne version.
+  if (snapshot?.version === 2 && Array.isArray(snapshot.profiles) && snapshot.profiles.length &&
+    snapshot.profiles.every((profile) => profile?.id && profile?.name && validPlants(profile.plants))) return snapshot;
+  throw new Error('Données de profils invalides.');
 }
 async function request(method, token, body, version) {
   const headers = { Authorization: `Bearer ${token}` };
@@ -113,6 +117,7 @@ export function syncOnChange() {
 export function initSync(handlers) {
   getPlants = handlers.getPlants;
   applyPlants = handlers.applyPlants;
+  hasData = handlers.hasData;
   $('#sync-open').addEventListener('click', () => {
     $('#sync-key').value = secret;
     $('#sync-dialog').showModal();
@@ -130,8 +135,8 @@ export function initSync(handlers) {
       const response = await request('GET', token);
       if (response.status === 200) {
         const remote = await decrypt(await response.text(), token);
-        if (getPlants().length && JSON.stringify(getPlants()) !== JSON.stringify(remote) &&
-          !confirm('Le cloud contient déjà des plantes. Remplacer les plantes présentes sur cet appareil par celles du cloud ? Cette action efface les changements locaux non synchronisés.')) {
+        if (hasData() && JSON.stringify(getPlants()) !== JSON.stringify(remote) &&
+          !confirm('Le cloud contient déjà des profils et des plantes. Remplacer les données présentes sur cet appareil par celles du cloud ? Cette action efface les changements locaux non synchronisés.')) {
           status('Connexion annulée. Les plantes locales sont conservées.'); return;
         }
         applyPlants(remote);
