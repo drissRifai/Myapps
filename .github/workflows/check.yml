@@ -14,3 +14,4 @@ jobs:
           node --check app.js
           node --check sync.js
           node --check functions/api/sync.js
+          node --check worker.js
